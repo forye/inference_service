@@ -1,0 +1,7 @@
+flask
+xgboost==2.0.0
+pandas
+scikit-learn==1.3.1
+redis
+pydantic
+pytest

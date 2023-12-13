@@ -1,0 +1,22 @@
+version: '3.8'
+services:
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    depends_on:
+      - redis
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - .:/app
+#      - .:/code
+
+  redis:
+    image: "redis:alpine"
+    ports:
+      - "6379:6379"
+#  volumes:
+#    - ./redis.conf:/usr/local/etc/redis/redis.conf
+#  command: redis-server /usr/local/etc/redis/redis.conf
