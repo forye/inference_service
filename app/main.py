@@ -79,6 +79,6 @@ def populate_redis_cache(csv_file_path, redis_host, redis_port):
 if __name__ == '__main__':
     # Load the model
 
-    print(populate_redis_cache('venue_preparation.csv','localhost',6379))
+    print(populate_redis_cache('venue_preparation_sample.csv','localhost',6379))
 
     app.run(debug=DEBUG, host='0.0.0.0')
