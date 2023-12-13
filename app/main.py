@@ -14,6 +14,7 @@ redis_client = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
 model = xgb.Booster()
 model.load_model("model_artifact.json")  # Adjust the path as needed
 
+AVG_PREP_TIME_DEFAULT = 15.0
 
 @app.route('/predict', methods=['POST'])
 def predict():
@@ -25,7 +26,8 @@ def predict():
     # Fetch avg_preparation_time from Redis
     avg_prep_time = redis_client.get(f"venue:{order_data.venue_id}:avg_preparation_time")
     if avg_prep_time is None:
-        return jsonify({"error": "venue_id's avg_preparation_time not found in cache"}), 404
+        avg_prep_time = AVG_PREP_TIME_DEFAULT
+        # return jsonify({"error": "venue_id's avg_preparation_time not found in cache"}), 404
     # Prepare the data for prediction
     features = pd.DataFrame([{
         "is_retail": order_data.is_retail,
@@ -40,7 +42,6 @@ def predict():
     response = {
         "timestamp": datetime.utcnow().isoformat(),
         "prediction": predictions.tolist(),
-        "input data": order_data.dict(),
         "avg_preparation_time":avg_prep_time,
         # Include any other relevant information here
         "input_data": request.json,

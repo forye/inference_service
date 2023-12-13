@@ -6,9 +6,13 @@ COPY . /app
 
 RUN pip install --no-cache-dir -r requirements.txt
 
+COPY . .
 EXPOSE 5000
 
+CMD ["python", "-m", "app.main"]
+
+
 #ENV NAME World
-CMD ["python", "./app/main.py"]
+#CMD ["python", "app/main.py"]
 #docker build -t my-flask-app .
 #docker run -p 5000:5000 my-flask-app
