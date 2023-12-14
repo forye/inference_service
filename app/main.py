@@ -1,49 +1,64 @@
 from flask import Flask, request, jsonify
 import os
-from app.data_models import OrderData,UpdateModelPrams
-from app.redis_populate import populate_redis_cache
-
+try:
+    from app.data_models import OrderData,UpdateModelPrams
+    from app.redis_populate import populate_redis_cache
+    from app.LRUCache import LRUCache
+except:
+    from data_models import OrderData, UpdateModelPrams
+    from redis_populate import populate_redis_cache
+    from LRUCache import LRUCache
 from pydantic import ValidationError
 import xgboost as xgb
 import pandas as pd
 import redis
 from datetime import datetime
+import json
 
-DEBUG = True
+
+
+with open('config.json', 'r') as config_file:
+    CONFIG = json.load(config_file)
+
+DEBUG = CONFIG['debug']
+
 app = Flask(__name__)
-redis_client = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
+redis_client = redis.Redis(host=CONFIG['redis']["redis_host"], port=CONFIG['redis']["redis_port"], db=CONFIG['redis']["db"], decode_responses=True)
+LOCAL_LRU = LRUCache(capacity=CONFIG['local_lru_cache_capacity'])
 
-INFERER=None
 
-class XgbInferer:
+class XgbSingletonInferer:
     _instance = None
-    avg_prep_time_default = 15.0
 
-    def __new__(cls, new_model_path=None, new_model_dict=None):
+    def __new__(cls, new_model_path=None, new_model_dict=None, model_callable=xgb.Booster):
         if cls._instance is None:
-            cls._instance = super(XgbInferer, cls).__new__(cls)
+            cls._instance = super(XgbSingletonInferer, cls).__new__(cls)
             cls._instance.model = None  # Initialize the model attribute
+            if model_callable is None:
+                raise Exception('No model to call')
+            cls.model_callable = model_callable
             cls._instance.load_xgb_model(new_model_path=new_model_path, new_model_dict=new_model_dict)
         return cls._instance
 
     def load_xgb_model(self, new_model_path=None, new_model_dict=None):
-        self.maybe_load_model_from_path(new_model_path)
-        self.maybe_load_model_from_json(new_model_dict)
+        self._maybe_load_model_from_path(new_model_path)
+        self._maybe_load_model_from_json(new_model_dict)
         return self
 
-    def maybe_load_model_from_path(self, new_model_path):
+    def _maybe_load_model_from_path(self, new_model_path):
         if new_model_path:
             try:
-                self.model = xgb.Booster()
+                self.model = self.model_callable()
                 self.model.load_model(new_model_path)
             except Exception as e:
                 print(f"Error loading model from path: {str(e)}")
 
-    def maybe_load_model_from_json(self, new_model_dict):
+    def _maybe_load_model_from_json(self, new_model_dict):
         if new_model_dict:
             try:
-                self.model = xgb.Booster()
+                self.model = self.model_callable()
                 self.model.load_model(bytearray(new_model_dict, 'utf-8'))
+                # self.model.load_model(bytearray(json.loads(new_model_dict), 'utf-8'))
             except Exception as e:
                 print(f"Error loading model from JSON: {str(e)}")
 
@@ -65,7 +80,7 @@ def update():
     except ValidationError as e:
         return jsonify({"error": "Invalid order data", "details": str(e)}), 400
     try:
-        INFERER = XgbInferer(new_model_path="").load_xgb_model(new_model_dict=model_params.new_model_dict, new_model_path=model_params.new_model_path)
+        XgbSingletonInferer(new_model_path="").load_xgb_model(new_model_dict=model_params.new_model_dict, new_model_path=model_params.new_model_path)
     except Exception as e:
         return jsonify({"error": "did not update model", "details": str(e)}), 400
     response = {
@@ -85,44 +100,57 @@ def update():
 
 @app.route('/predict', methods=['POST'])
 def predict():
+    # validate input
     try:
         order_data = OrderData(**request.json)
     except ValidationError as e:
+        # if the request is a list
         return jsonify({"error": "Invalid order data", "details": str(e)}), 400
 
-    INFERER = XgbInferer(new_model_path="model_artifact.json")
-    # Fetch avg_preparation_time from Redis
-    avg_prep_time = redis_client.get(f"venue:{order_data.venue_id}:avg_preparation_time")
-    found_in_cach = True
+    # load model (singleton
+    model = XgbSingletonInferer(new_model_path="model_artifact.json")
+
+    # Fetch avg_preparation_time from Cach
+    # first,  try to fetch value from local lru cache, to save a call to redis
+    pred_time_key = f"venue:{order_data.venue_id}:avg_preparation_time"
+    avg_prep_time = LOCAL_LRU.get(pred_time_key)
+    # then,  try redis
     if avg_prep_time is None:
-        avg_prep_time = INFERER.avg_prep_time_default
-        found_in_cach = False
+        avg_prep_time = redis_client.get(pred_time_key)
+        LOCAL_LRU.put(pred_time_key, avg_prep_time)
+    # not in cache, set to default value
+    found_in_cache = avg_prep_time is not None
+    if avg_prep_time is None:
+        avg_prep_time = CONFIG['avg_prep_time_default']        
+
     # Prepare the data for prediction
+    # features_mapping = {
+    #     "is_retail": "order_data.is_retail",
+    #     "avg_preparation_time": "float(avg_prep_time)",
+    #     "hour_of_day": "pd.to_datetime(order_data.time_received).hour"
+    # }
+    # features = pd.DataFrame([{feature:eval(features_mapping[feature]) for feature in features_mapping.keys()}])
     features = pd.DataFrame([{
         "is_retail": order_data.is_retail,
         "avg_preparation_time": float(avg_prep_time),
         "hour_of_day": pd.to_datetime(order_data.time_received).hour
     }])
     dmatrix = xgb.DMatrix(features)
-    predictions = INFERER.model.predict(dmatrix)
+    predictions = model.model.predict(dmatrix)
     response = {
         "timestamp": datetime.utcnow().isoformat(),
         "prediction": predictions.tolist(),
         "avg_preparation_time":avg_prep_time,
         "input_data": request.json,
-        "found_in_cach": found_in_cach,
+        "found_in_cache": found_in_cache,
         "message": "Prediction successful"
     }
     return jsonify(response)
 
 
 
-
-
-
 if __name__ == '__main__':
     # Load the model
-
-    print(populate_redis_cache('venue_preparation.csv', 'redis', 6379))
+    print(populate_redis_cache(CONFIG['cached_data_csv'], CONFIG['redis']['redis_host'], CONFIG['redis']['redis_port']))
 
     app.run(debug=DEBUG, host='0.0.0.0')

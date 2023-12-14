@@ -22,7 +22,7 @@ def test_predict_endpoint(client):
     assert "prediction" in response.json
 
 
-# ntegration test
+# integration test
 
 import pytest
 from app.main import app
@@ -52,15 +52,15 @@ def test_complete_prediction_flow(client):
 
 
 # performance test
-# from locust import HttpUser, task, between
-#
-# class QuickstartUser(HttpUser):
-#     wait_time = between(1, 2)
-#
-#     @task
-#     def predict_endpoint(self):
-#         self.client.post("/predict", json={
-#             "venue_id": 123,
-#             "time_received": "2021-01-01T12:00:00",
-#             "is_retail": True
-#         })
+from locust import HttpUser, task, between
+
+class QuickstartUser(HttpUser):
+    wait_time = between(1, 2)
+
+    @task
+    def predict_endpoint(self):
+        self.client.post("/predict", json={
+            "venue_id": "8a61bb7",
+            "time_received": "2021-01-01T12:00:00",
+            "is_retail": True
+        })
