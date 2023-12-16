@@ -1,6 +1,7 @@
 import pytest
 from app.main import app
 from locust import HttpUser, task, between
+import unittest
 
 MOCK_REQUEST_DATA = {
         "venue_id": "8a61bb7",
@@ -13,14 +14,31 @@ def client():
     with app.test_client() as client:
         yield client
 
-def test_predict_endpoint(client):
-    # Send a POST request to the /predict endpoint
-    response = client.post('/predict', json=MOCK_REQUEST_DATA)
+class TestYourAPI(unittest.TestCase):
+    def setUp(self):
+        app.config['TESTING'] = True
+        self.app = app.test_client()
 
-    # Check if the response is as expected
-    assert response.status_code == 200
-    assert "prediction" in response.json
-    # tbd do moore test according to label distribution and business logic
+    def tearDown(self):
+        pass
+
+
+    def test_predict_endpoint(self):
+        # Send a POST request to the /predict endpoint
+        response = self.app.post('/predict', json=MOCK_REQUEST_DATA)
+
+        # Check if the response is as expected
+        assert response.status_code == 200
+        assert "prediction" in response.json
+
+    def test_predict_generic_endpoint(self):
+        # Send a POST request to the /predict endpoint
+        response = self.app.post('/predict_generic', json=MOCK_REQUEST_DATA)
+
+        # Check if the response is as expected
+        assert response.status_code == 200
+        assert "prediction" in response.json
+        # tbd add more test according to label distribution and business logic
 
 
 # integration test
@@ -44,7 +62,6 @@ def test_complete_prediction_flow(client):
 
 
 # performance test
-
 class QuickstartUser(HttpUser):
     wait_time = between(1, 2)
 

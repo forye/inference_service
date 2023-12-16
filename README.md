@@ -327,4 +327,6 @@ The features can be boolean or continuous, not categorical
 
 6. allow generation of feature from multiple sources
 
-7. Validate in put in predict_generic
+7. Validate the input in predict_generic
+
+8. Add tests according to label distribution and business logic for the endpoints
