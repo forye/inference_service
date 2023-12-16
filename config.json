@@ -4,11 +4,33 @@
         "redis_port": 6379,
         "db": 0
     },
+   "mlflow": {
+     "model_name":"model"
+   },
+   "features" : {
+     "is_retail": {
+       "def": "lambda x: x",
+       "source_feature": "is_retail",
+       "cache": {}
+     },
+     "avg_preparation_time": {
+       "def": "lambda x: float(x)",
+       "source_feature": "avg_preparation_time",
+       "default_val": 15,
+       "cache": {
+         "cached_namespace": "venue",
+         "cached_key": "venue_id"
+       }
+     },
+     "hour_of_day": {
+       "def": "lambda x: pd.to_datetime(x).hour",
+       "source_feature": "time_received",
+       "cache": {}
+     }
+   },
     "base_model_artifact": "model_artifact.json",
     "avg_prep_time_default": 15,
      "debug":true,
      "local_lru_cache_capacity": 10,
      "cached_data_csv": "venue_preparation.csv"
-
-
 }

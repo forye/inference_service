@@ -1,18 +1,24 @@
+
+from datetime import datetime
+import json
 from flask import Flask, request, jsonify
 from pydantic import ValidationError
 import xgboost as xgb
 import pandas as pd
 import redis
-from datetime import datetime
-import mlflow
-import mlflow.xgboost
-import json
 try:
     from app.data_models import OrderData,UpdateModelPrams
     from app.redis_populate import populate_redis_cache
+    # from app.LRUCache import LRUCache
 except:
     from data_models import OrderData, UpdateModelPrams
     from redis_populate import populate_redis_cache
+    # from LRUCache import LRUCache
+
+from datetime import datetime
+import mlflow
+import mlflow.xgboost
+
 
 with open('config.json', 'r') as config_file:
     CONFIG = json.load(config_file)
@@ -23,7 +29,6 @@ redis_client = redis.Redis(host=CONFIG['redis']["redis_host"], port=CONFIG['redi
 
 class XgbMlflowSingletonInferer:
     _instance = None
-
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(XgbMlflowSingletonInferer, cls).__new__(cls)
@@ -33,13 +38,14 @@ class XgbMlflowSingletonInferer:
 
     def load_xgb_model(self, new_model_path=None, new_model_dict=None):
         if not new_model_path:
-            # if URI is not provided, assime the model json is provided and load model as bytarry
+            # if URI is not provided, assume the model json is provided and load model as bytarry
             if new_model_dict:
                 new_model_path = bytearray(new_model_dict, 'utf-8')
         try:
             mlflow.start_run()
             self.model = mlflow.xgboost.load_model(new_model_path)
             mlflow.end_run()
+            mlflow.xgboost.log_model(self.model, CONFIG["mlflow"]["model_name"])
         except Exception as e:
             print(f"Error loading model: {str(e)}")
 
@@ -67,6 +73,7 @@ def update():
     return jsonify(response)
 
 
+#better just run: mlflow models serve -m model -p 5001
 @app.route('/predict', methods=['POST'])
 def predict():
     try:

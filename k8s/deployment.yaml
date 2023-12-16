@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-deployment
+spec:
+  replicas: 2   # Set the desired number of replicas
+  selector:
+    matchLabels:
+      app: app
+  template:
+    metadata:
+      labels:
+        app: app
+    spec:
+      containers:
+      - name: your-app
+        image: docker-image:latest  # Replace with your Docker image name and tag
+        ports:
+        - containerPort: 5000 # app listening port
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-service
+spec:
+  selector:
+    app: your-app
+  ports:
+  - protocol: TCP
+    port: 80   #  expose externally
+    targetPort: 5000  # app listening port
+  type: LoadBalancer  # Expose the service externally using a load balancer
