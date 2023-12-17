@@ -19,7 +19,8 @@ It provides multiple API endpoints for making predictions and updating the machi
    - [Kubernetes (K8s)]
 2. [API Endpoints](#api-endpoints)
    - [`/predict`]
-   - [`/predict_many`]
+   - [`/predict_many`]   
+   - [`/predict_batch`]
    - [`/update`]
    - [`/update_generic`]
 3. [Configuration (config.json)](#configuration-configjson)
@@ -35,7 +36,7 @@ It provides multiple API endpoints for making predictions and updating the machi
    - [Features and Feature Manipulation]
  5. [Optimizations](#optimizations)
  
-##How to Execute
+## How to Execute
 <a id="how-to-execute"></a>
 
 #### notes:
@@ -151,10 +152,52 @@ Example Response:
         "message": "Prediction successful"
     }
     ```
-### /predict_many Endpoint
-This endpoint allows batch predictions based on input data for multiple orders.
+
 
 #### POST /predict_many
+Example Request:
+    Copy code
+    ```json
+    [{
+        "venue_id": "8a61bb7",
+        "time_received": "2021-01-01T12:00:00",
+        "is_retail": true
+    },
+    {
+        "venue_id": "8a61bb7",
+        "time_received": "2021-01-01T12:00:00",
+        "is_retail": true
+    },
+    {
+        "venue_id": "8a61bb7",
+        "time_received": "2021-01-01T12:00:00",
+        "is_retail": true
+    }]
+    ```
+    
+Example Response:
+
+    ```json    
+    {
+        "timestamp": "2023-12-15T12:00:00",
+        "prediction": [0.85,0.85,0.85],
+        "avg_preparation_time": 10.5,
+        "input_data": [{
+            "venue_id": "8a61bb7",
+            "time_received": "2021-01-01T12:00:00",
+            "is_retail": true
+        }..}],
+        "found_in_cache": true,
+        "message": "Prediction successful"
+    }
+    ```
+    
+### /predict_batch Endpoint
+This endpoint allows batch predictions based on input data for multiple orders.
+
+This implementation counts as bad practice for web development for its readily and vulnerability to bugs but the response is much more slim
+
+#### POST /predict_batch
 
 Example Request:
 
@@ -288,7 +331,7 @@ The project includes unit tests, integration tests, and performance tests using 
 
 ### Predict vs. Predict Many
 
-The /predict and /predict_many endpoints cater to both single and batch prediction requests, allowing for flexibility and efficient use of the service.
+The /predict and /predict_batch endpoints cater to both single and batch prediction requests, allowing for flexibility and efficient use of the service.
 
 ###  Kubernetes and Load Balancing (Bonus - not tested)
 

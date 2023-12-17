@@ -216,6 +216,64 @@ def predict():
         return jsonify({"error": str(ex)}), 400
 
 
+
+@app.route('/predict_many', methods=['POST'])
+def predict_many():
+    request_data_list = request.json
+
+    try:
+        # Load model (singleton)
+        model = XgbSingletonInferer(new_model_path=CONFIG['base_model_artifact'])
+
+        if type(request_data_list) != list:
+            return jsonify({"error": "Input data should be a list of objects", "type of in put data:": str(type(request_data))}), 400
+        features_list = []
+        found_in_cache = False
+        for request_data in request_data_list:
+            features_data = request_data.copy()
+            try:
+                _ = OrderData(**features_data)  # This line can be removed if you don't use the variable _
+            except ValidationError as e:
+                return jsonify({"error": "Invalid order data in request", "details": str(e)}), 400
+
+            avg_prep_time, _found_in_cache = get_value_from_cache(features_data['venue_id'],
+                                                                 subkey="avg_preparation_time",
+                                                                 namespace="venue")
+            found_in_cache = _found_in_cache or found_in_cache
+            features_data.update({'avg_preparation_time': avg_prep_time})
+
+            is_validated, validation_message = model.validate_input(features_data)
+            if not is_validated:
+                return jsonify({"error": "features" + validation_message}), 400
+
+            features_list.append({
+            "is_retail": features_data["is_retail"],
+            "avg_preparation_time": float(features_data['avg_preparation_time']),
+            "hour_of_day": pd.to_datetime(features_data["time_received"]).hour
+        })
+
+        features = pd.DataFrame(features_list)
+
+        dmatrix = xgb.DMatrix(features)
+        predictions = model.predict(dmatrix)
+        for prediction in predictions:
+            is_validated, validation_message = model.validate_output(prediction)
+            if not is_validated:
+                return jsonify({"error": validation_message}), 400
+
+        response = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "predictions": predictions.tolist(),
+            "avg_preparation_time": features['avg_preparation_time'].mean(),
+            "input_data": request.json,
+            "found_in_cache": found_in_cache,
+            "message": "Prediction successful"
+        }
+        return jsonify(response)
+    except Exception as ex:
+        return jsonify({"error": str(ex)}), 400
+
+
 @app.route('/predict_generic', methods=['POST'])
 def predict_generic():
     try:
@@ -271,8 +329,8 @@ def validate_input_many(features_data):
         return jsonify({"error": "Input arrays must have the same length."}), 400
 
 
-@app.route('/predict_many', methods=['POST'])
-def predict_many():
+@app.route('/predict_batch', methods=['POST'])
+def predict_batch():
     features_data = request.json
     try:
         validate_input_many(features_data)
